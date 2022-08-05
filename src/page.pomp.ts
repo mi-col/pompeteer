@@ -1,5 +1,5 @@
 import { ElementHandle, Page } from "puppeteer";
-import { PompElement, PompElementCollection, PompElementConstructor } from "./element.pomp";
+import { PompElement, PompElementCollection, PompElementConstructor, ExtraElementParams } from "./element.pomp";
 import { PompTimeoutError, waitFor } from "./waitFor";
 
 /** Page class to mimic a Page Object Modal.
@@ -9,12 +9,14 @@ export class PompPage {
   constructor(public page: Page) {}
 
   /** A single element xpath selector */
-  $x<T extends PompElement = PompElement>(
+  $x<C extends PompElementConstructor<PompElement>>(
     /** The xpath selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any,
-  ): T {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom element */
+    ...args: ExtraElementParams<typeof element>
+  ): InstanceType<C> {
     const locator = async (timeout?: number) => {
       const child = await waitFor<ElementHandle<Element>>(
         this.page,
@@ -29,16 +31,18 @@ export class PompPage {
       }
       return child;
     };
-    return new element(this.page, locator);
+    return new element(this.page, locator, ...args) as any;
   }
 
   /** An element collection xpath selector */
-  $$x<T extends PompElement = PompElement>(
+  $$x<C extends PompElementConstructor<PompElement>>(
     /** The xpath selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any,
-  ): PompElementCollection<T> {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom elements */
+    ...args: ExtraElementParams<typeof element>
+  ): PompElementCollection<C> {
     const locator = async (timeout?: number) => {
       await waitFor<ElementHandle<Element>>(
         this.page,
@@ -54,31 +58,35 @@ export class PompPage {
       }
       return child;
     };
-    return new PompElementCollection<T>(this.page, locator, element);
+    return new PompElementCollection(this.page, locator, element, ...args) as any;
   }
 
   /** A single element css selector */
-  $<T extends PompElement = PompElement>(
+  $<C extends PompElementConstructor<PompElement>>(
     /** The css selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any,
-  ): T {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom elements */
+    ...args: ExtraElementParams<typeof element>
+  ): InstanceType<C> {
     const locator = async (timeout?: number) => this.page.waitForSelector(selector, { timeout });
-    return new element(this.page, locator);
+    return new element(this.page, locator, ...args) as any;
   }
 
   /** An element collection css selector */
-  $$<T extends PompElement = PompElement>(
+  $$<C extends PompElementConstructor<PompElement>>(
     /** The css selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any,
-  ): PompElementCollection<T> {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom elements */
+    ...args: ExtraElementParams<typeof element>
+  ): PompElementCollection<C> {
     const locator = async (timeout?: number) => {
       await this.page.waitForSelector(selector, { timeout }).catch(() => {});
       return await this.page.$$(selector);
     };
-    return new PompElementCollection<T>(this.page, locator, element);
+    return new PompElementCollection(this.page, locator, element, ...args) as any;
   }
 }

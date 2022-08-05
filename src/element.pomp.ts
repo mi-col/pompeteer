@@ -11,8 +11,11 @@ export type CollectionLocatorFunction = (
 
 export type PompElementConstructor<T extends PompElement> = new (
   page: Page,
-  locator: LocatorFunction
+  locator: LocatorFunction,
+  ...args: any[]
 ) => T;
+
+export type ExtraElementParams<T extends { new (...args: any): any }> = ConstructorParameters<T> extends [infer Page, infer Locator, ...infer Rest] ? Rest : ConstructorParameters<T>;
 
 /** A custom reusable element class with nesting capabilities.
  * Use as the building block of your POMs and to extend element interactions.
@@ -89,12 +92,14 @@ export class PompElement {
    * To look through descendants the selector must begin with .//.
    * Be mindful of Puppeteer's xpath support.
    */
-  $x<T extends PompElement = PompElement>(
+  $x<C extends PompElementConstructor<PompElement>>(
     /** The xpath selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any
-  ): T {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom element */
+    ...args: ExtraElementParams<typeof element>
+  ): InstanceType<C> {
     const childLocator = async (timeout?: number) => {
       const child = await waitFor<ElementHandle<Element>>(
         this.page,
@@ -109,19 +114,21 @@ export class PompElement {
       }
       return child;
     };
-    return new element(this.page, childLocator);
+    return new element(this.page, childLocator, ...args) as any;
   }
 
   /** A child element collection xpath selector.
    * To look through descendants the selector must begin with .//.
    * Be mindful of Puppeteer's xpath support.
    */
-  $$x<T extends PompElement = PompElement>(
+  $$x<C extends PompElementConstructor<PompElement>>(
     /** The xpath selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any
-  ): PompElementCollection<T> {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom elements */
+    ...args: ExtraElementParams<typeof element>
+  ): PompElementCollection<C> {
     const childLocator = async (timeout?: number) => {
       await waitFor<ElementHandle<Element>>(
         this.page,
@@ -137,63 +144,69 @@ export class PompElement {
       }
       return children;
     };
-    return new PompElementCollection<T>(this.page, childLocator, element);
+    return new PompElementCollection(this.page, childLocator, element, ...args);
   }
 
   /** A single child element css selector. */
-  $<T extends PompElement = PompElement>(
+  $<C extends PompElementConstructor<PompElement>>(
     /** The css selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any
-  ): T {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom element */
+    ...args: ExtraElementParams<typeof element>
+  ): InstanceType<C> {
     const childLocator = async (timeout?: number) =>
       (await this.locator(timeout)).waitForSelector(selector, {
         timeout,
       }) as Promise<ElementHandle<Element>>;
-    return new element(this.page, childLocator);
+    return new element(this.page, childLocator, ...args) as any;
   }
 
   /** A sub-element collection css selector. */
-  $$<T extends PompElement = PompElement>(
+  $$<C extends PompElementConstructor<PompElement>>(
     /** The css selector */
     selector: string,
     /** A custom PompElement class */
-    element: PompElementConstructor<T> = PompElement as any
-  ): PompElementCollection<T> {
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom element */
+    ...args: ExtraElementParams<typeof element>
+  ): PompElementCollection<C> {
     const childLocator = async (timeout?: number) => {
       await (await this.locator(timeout)).waitForSelector(selector, { timeout }).catch(() => {});
       return await (await this.locator(timeout)).$$(selector);
     };
-    return new PompElementCollection<T>(this.page, childLocator, element);
+    return new PompElementCollection(this.page, childLocator, element, ...args);
   }
 }
 
 /** A collection of elements with some utility methods.
  * For situations when a page has a list of repeating components.
  */
-export class PompElementCollection<T extends PompElement = PompElement> {
+export class PompElementCollection<C extends PompElementConstructor<PompElement>> {
   /** Function to locate and retrieve all matching elements */
-  locator: (timeout?: number) => Promise<T[]>;
+  locator: (timeout?: number) => Promise<InstanceType<C>[]>;
 
   constructor(
     public page: Page,
     /** Function to locate and retrieve all matching element handlers */
     collectionLocator: CollectionLocatorFunction,
     /** Custom PompElement class of the underlying items */
-    element: PompElementConstructor<T> = PompElement as any,
+    element: C = PompElement as any,
+    /** Any additional arguments to be passed to your custom elements */
+    ...args: ExtraElementParams<typeof element>
   ) {
     this.page = page;
     this.locator = async (timeout?: number) => {
       return (await collectionLocator(timeout)).map((el) => {
         const locator = () => Promise.resolve(el);
-        return new element(this.page, locator);
+        return new element(this.page, locator, ...args) as any;
       });
     };
   }
 
   /** Utility function to retrieve the first matching element from the collection */
-  async find(predicate: (value: T) => Promise<boolean> | boolean): Promise<T | undefined> {
+  async find(predicate: (value: InstanceType<C>) => Promise<boolean> | boolean): Promise<InstanceType<C> | undefined> {
     for (const child of (await this.locator())) {
       const isMatch = await predicate(child);
       if (isMatch) {
@@ -204,9 +217,15 @@ export class PompElementCollection<T extends PompElement = PompElement> {
   }
 
   /** Utility function to retrieve all matching elements from the collection */
-  async filter(predicate: (value: T) => Promise<boolean>) {
-    return (await Promise.all(
-      (await this.locator()).map(async (child) => ({ child, isValid: await predicate(child) }))
-    )).filter(({ isValid }) => isValid).map(({ child }) => child);
+  async filter(predicate: (value: InstanceType<C>) => Promise<boolean>) {
+    return (
+      await Promise.all(
+        (
+          await this.locator()
+        ).map(async (child) => ({ child, isValid: await predicate(child) }))
+      )
+    )
+      .filter(({ isValid }) => isValid)
+      .map(({ child }) => child);
   }
 }

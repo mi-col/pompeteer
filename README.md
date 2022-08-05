@@ -55,7 +55,24 @@ const main = await new MainPage(page).open();
 const userData = await (await main.users.locator())[0].getUser();
 ```
 
-You can also specify sub-elements within elements the same way you can within pages in order to easily create a nested structure of any complexity.
+You can also specify sub-elements within elements the same way you can within pages in order to easily create a nested structure of any complexity. As well as create elements with additional arguments.
+
+```javascript
+export class CustomElement extends PompElement {
+  constructor(
+    page: Page,
+    locator: LocatorFunction,
+    private color: string,
+    private value: number,
+  ) {
+    super(page, locator);
+  }
+}
+
+export class CustomPage extends PompPage {
+  element = this.$$("#element", CustomElement, 'red', 45);
+}
+```
 
 ## License
 
